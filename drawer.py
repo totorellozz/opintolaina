@@ -128,11 +128,14 @@ for month in range(1, act_repayment_years * 12 + 1):
 
     remaining_loan += monthly_interest 
     remaining_loan -= monthly_repayment 
-
     total_interest += monthly_interest
-
     current_investment += current_investment * monthly_growth_rate
     current_investment -= monthly_interest
+
+    total_fees = 2 * years_support * debit_fee + arrangement_fee * years_support 
+    total_cost = total_loan + total_interest + total_fees
+    net_revenue = current_investment - total_cost
+    
     month_counter += 1
     months.append(month_counter)
     remaining_loans.append(remaining_loan) 
@@ -143,6 +146,12 @@ for month in range(1, act_repayment_years * 12 + 1):
     print(f"Month {month}: Remaining Loan: €{remaining_loan:.2f}, Monthly Repayment: €{monthly_repayment:.2f}, "
           f"Interest Charged: €{monthly_interest:.2f}, Investment Value: €{current_investment:.2f}, "
           f"Total Interest Accrued: €{total_interest:.2f}")
+    
+    if current_investment >= total_cost:
+        print(f"You could pay your loan now at month {month}!")
+    else:
+        pass
+
     
 
 total_fees = 2 * years_support * debit_fee + arrangement_fee * years_support 
