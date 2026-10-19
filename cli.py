@@ -2,6 +2,7 @@ import csv
 import os
 import subprocess
 import sys
+from typing import NamedTuple
 
 import matplotlib
 import requests
@@ -13,10 +14,21 @@ import matplotlib.pyplot as plt
 from model import MAX_MONTHLY_LOAN, COMP_MAX_COUNTED
 
 MARGIN = 0.5            # bank margin, %; typical (Nordea example 2026)
-FUND_FEE = 1.5          # yearly fund charge, % (deducted from fund growth, not a loan cost)
 DEBIT_FEE = 2.5         # per repayment instalment, EUR
 ARRANGEMENT_FEE = 10    # one-off, EUR
 DEFAULT_REPAYMENT_YEARS = 15
+
+
+class Inputs(NamedTuple):
+    monthly_pay: int
+    growth: float
+    fund_fee: float
+    starting_pot: float
+    living_cost_yearly: float
+    kela_grant: float
+    years_support: int
+    repayment_years: int
+    degree_credits: int | None
 
 
 def euribor_get():
@@ -36,6 +48,10 @@ def ask_inputs():
         print(f"State guarantee covers max {MAX_MONTHLY_LOAN}€/month, using that.")
         monthly_pay = MAX_MONTHLY_LOAN
     growth = float(input("Expected yearly growth of your investment fund (%): "))
+    fund_fee = float(input("Yearly fund fee (%, taken off the growth): "))
+    starting_pot = float(input("Investments you already have, put into the same fund (€, 0 for none): "))
+    living_cost_yearly = float(input("Your living costs per year (€, paid from the fund during studies): "))
+    kela_grant = float(input("Kela grant per month (€, paid 9 months a year, offsets living costs): "))
     years_support = int(input("Length of your support from the state (years): "))
     repayment = input("Do you have a program of repayment to the state yet? (y/n): ")
 
@@ -60,7 +76,8 @@ def ask_inputs():
         if degree_credits not in COMP_MAX_COUNTED:
             raise SystemExit(f"Degree size must be one of {sorted(COMP_MAX_COUNTED)}")
 
-    return monthly_pay, growth, years_support, repayment_years, degree_credits
+    return Inputs(monthly_pay, growth, fund_fee, starting_pot, living_cost_yearly, kela_grant,
+                  years_support, repayment_years, degree_credits)
 
 
 def open_file(path):
@@ -74,7 +91,7 @@ def open_file(path):
 
 def save_outputs(rows, png="opintolaina.png", csv_path="opintolaina_data.csv"):
     """Write the chart and CSV from simulate() rows, then open both."""
-    months, disbursed, investment, interest, outstanding, in_hand = zip(*rows)
+    months, disbursed, investment, interest, outstanding, in_hand, pot_only, grant_total = zip(*rows)
 
     plt.figure(figsize=(10, 6))
     plt.plot(months, disbursed, label="Loan Disbursed (€)")
@@ -82,6 +99,8 @@ def save_outputs(rows, png="opintolaina.png", csv_path="opintolaina_data.csv"):
     plt.plot(months, interest, label="Total Interest (€)")
     plt.plot(months, outstanding, label="Outstanding Loan (€)")
     plt.plot(months, in_hand, label="In Hand (€)")
+    plt.plot(months, pot_only, label="Starting Pot Only (€)")
+    plt.plot(months, grant_total, label="Kela Grant Received (€)")
     plt.xlabel("Months")
     plt.ylabel("Amount (€)")
     plt.title("Loan, Investment, and Interest Over Time")
@@ -93,7 +112,8 @@ def save_outputs(rows, png="opintolaina.png", csv_path="opintolaina_data.csv"):
     with open(csv_path, mode="w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["Month", "Loan Balance (€)", "Investment Value (€)",
-                         "Total Interest (€)", "Remaining Loan (€)", "In Hand (€)"])
+                         "Total Interest (€)", "Remaining Loan (€)", "In Hand (€)",
+                         "Starting Pot Only (€)", "Kela Grant Received (€)"])
         writer.writerows(rows)
 
     open_file(png)

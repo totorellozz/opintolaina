@@ -1,20 +1,23 @@
-from cli import ask_inputs, euribor_get, save_outputs, MARGIN, FUND_FEE, DEBIT_FEE, ARRANGEMENT_FEE
+from cli import ask_inputs, euribor_get, save_outputs, MARGIN, DEBIT_FEE, ARRANGEMENT_FEE
 from model import simulate
 
-monthly_pay, growth, years_support, repayment_years, degree_credits = ask_inputs()
+i = ask_inputs()
 
 first_date, euribor12 = euribor_get()
 print(f"Euribor {first_date} Rate: {euribor12}")
 rate = euribor12 + MARGIN
 
-rows, s = simulate(monthly_pay, years_support, repayment_years, rate, growth,
-                   FUND_FEE, DEBIT_FEE, ARRANGEMENT_FEE, degree_credits)
+rows, s = simulate(i.monthly_pay, i.years_support, i.repayment_years, rate, i.growth, i.fund_fee,
+                   DEBIT_FEE, ARRANGEMENT_FEE, i.degree_credits,
+                   i.starting_pot, i.living_cost_yearly, i.kela_grant)
 
-for month, disbursed, investment, interest, outstanding, in_hand in rows:
-    print(f"Month {month}: disbursed {disbursed:.2f}€, outstanding loan {outstanding:.2f}€, "
-          f"interest total {interest:.2f}€, investment {investment:.2f}€, in hand {in_hand:.2f}€")
+for r in rows:
+    print(f"Month {r.month}: disbursed {r.disbursed:.2f}€, outstanding loan {r.outstanding:.2f}€, "
+          f"interest total {r.total_interest:.2f}€, investment {r.investment:.2f}€, "
+          f"in hand {r.in_hand:.2f}€, pot only {r.pot_only:.2f}€, grant received {r.grant_total:.2f}€")
 
-payoff = next((m for m, _, inv, _, out, _ in rows if m > years_support * 12 and inv >= out), None)
+payoff = next((r.month for r in rows
+               if r.month > i.years_support * 12 and r.investment >= r.outstanding), None)
 if payoff:
     print(f"You could pay your loan off from the fund at month {payoff}!")
 
@@ -24,10 +27,17 @@ print(f"Loan compensation (lainahyvitys): {s['compensation']:.2f}€")
 print(f"Total interest accrued: {s['total_interest']:.2f}€")
 print(f"Total fees (arrangement + automatic debit): {s['total_fees']:.2f}€")
 print(f"Total cost of the loan: {s['total_cost']:.2f}€")
+print(f"Kela grant received: {s['grant_total']:.2f}€")
+print(f"Living costs taken from the fund: {s['living_withdrawn']:.2f}€")
+if s["living_shortfall"] > 0:
+    print(f"WARNING: fund ran dry, {s['living_shortfall']:.2f}€ of living costs were not covered")
 print(f"Total value of investment: {s['investment']:.2f}€")
-print(f"Net revenue from the opintolaina: {s['net_revenue']:.2f}€")
+print(f"In hand (investment minus loan costs): {s['net_revenue']:.2f}€")
 print(f"Capital income tax on fund gain: {s['tax']:.2f}€")
-print(f"Taxed revenue from the opintolaina: {s['taxed_revenue']:.2f}€")
-print(f"You made {s['taxed_revenue'] / s['disbursed']:.2f} X of your investment")
+print(f"In hand after tax: {s['taxed_revenue']:.2f}€")
+print(f"Starting pot alone would be: {s['pot_only']:.2f}€")
+print(f"Extra from the loan strategy vs pot alone (after tax, living costs added back): {s['extra_vs_pot_only']:.2f}€")
+if s["disbursed"]:
+    print(f"You made {s['extra_vs_pot_only'] / s['disbursed']:.2f} X of your loan")
 
 save_outputs(rows)

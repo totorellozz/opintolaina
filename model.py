@@ -3,6 +3,8 @@
 Timeline: month 1 = January. Draw Jan-May, pause Jun-Aug, draw Sep-Dec.
 """
 
+from typing import NamedTuple
+
 MAX_MONTHLY_LOAN = 850          # state guarantee cap per aid month, age 18+, studying in Finland
 AID_MONTHS_PER_YEAR = 9
 AID_CALENDAR_MONTHS = (1, 2, 3, 4, 5, 9, 10, 11, 12)  # drawn monthly
@@ -35,9 +37,26 @@ def capital_income_tax(gain):
             + CAPITAL_TAX_HIGH * max(gain - CAPITAL_TAX_LIMIT, 0))
 
 
+class Row(NamedTuple):
+    month: int
+    disbursed: float
+    investment: float
+    total_interest: float
+    outstanding: float
+    in_hand: float
+    pot_only: float
+    grant_total: float
+
+
 def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_growth_pct,
-             fund_fee_pct, debit_fee, arrangement_fee, degree_credits=None):
-    """Returns (rows, summary). degree_credits=None means no loan compensation."""
+             fund_fee_pct, debit_fee, arrangement_fee, degree_credits=None,
+             starting_pot=0.0, living_cost_yearly=0.0, kela_grant=0.0):
+    """Returns (rows, summary). degree_credits=None means no loan compensation.
+
+    The loan, the starting pot and any grant surplus go into one fund. Living costs
+    (net of the Kela grant, paid in the same 9 months as the loan) are taken out of it
+    during the study years. pot_only is the starting pot growing alone.
+    """
     monthly_rate = annual_rate_pct / 100 / 12
     monthly_growth = (1 + (fund_growth_pct - fund_fee_pct) / 100) ** (1 / 12) - 1
 
@@ -50,9 +69,14 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
     disbursed = 0.0
     pending_interest = 0.0
     total_interest = 0.0
-    investment = 0.0
+    investment = starting_pot
+    pot_only = starting_pot
+    deposits = starting_pot       # everything put into the fund (for the tax base)
+    withdrawals = 0.0             # living costs taken out of the fund
+    shortfall = 0.0               # living costs the fund could not cover
+    grant_total = 0.0
     cash_paid = 0.0       # cash paid to the bank so far: interest-only, instalments, fees
-    rows = []             # (month, disbursed, investment, total_interest, outstanding, in_hand)
+    rows = []
     compensation = 0.0
     payment = 0.0
 
@@ -69,6 +93,20 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
             loan += monthly_pay
             disbursed += monthly_pay
             investment += monthly_pay
+            deposits += monthly_pay
+
+        if in_study:
+            grant = kela_grant if calendar in AID_CALENDAR_MONTHS else 0.0
+            grant_total += grant
+            net = grant - living_cost_yearly / 12
+            if net >= 0:
+                investment += net
+                deposits += net
+            else:
+                taken = min(-net, investment)
+                investment -= taken
+                withdrawals += taken
+                shortfall += -net - taken
 
         if grace_month == 1 and degree_credits:
             compensation = min(loan, loan_compensation(monthly_pay, years_support, degree_credits))
@@ -77,6 +115,7 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
         interest = loan * monthly_rate
         total_interest += interest
         investment *= 1 + monthly_growth
+        pot_only *= 1 + monthly_growth
 
         capitalising = (in_study or (in_grace and grace_month <= GRACE_CAPITALISE_UNTIL))
         if capitalising:
@@ -99,14 +138,16 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
             cash_paid += payment + debit_fee
 
         outstanding = max(loan, 0.0)
-        rows.append((month, disbursed, investment, total_interest, outstanding,
-                     investment - outstanding - pending_interest - cash_paid))
+        rows.append(Row(month, disbursed, investment, total_interest, outstanding,
+                        investment - outstanding - pending_interest - cash_paid,
+                        pot_only, grant_total))
 
     total_fees = arrangement_fee + debit_fee * repay_months
     total_cost = disbursed + total_interest + total_fees - compensation
     net_revenue = investment - total_cost
     # Student-loan interest is not deductible, so tax is on fund gain alone.
-    tax = capital_income_tax(investment - disbursed)
+    tax = capital_income_tax(investment + withdrawals - deposits)
+    pot_only_taxed = pot_only - capital_income_tax(pot_only - starting_pot)
     summary = {
         "disbursed": disbursed,
         "total_interest": total_interest,
@@ -119,5 +160,10 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
         "net_revenue": net_revenue,
         "tax": tax,
         "taxed_revenue": net_revenue - tax,
+        "pot_only": pot_only,
+        "extra_vs_pot_only": net_revenue - tax + withdrawals - pot_only_taxed,  # living costs are spent either way
+        "living_withdrawn": withdrawals,
+        "living_shortfall": shortfall,
+        "grant_total": grant_total,
     }
     return rows, summary
