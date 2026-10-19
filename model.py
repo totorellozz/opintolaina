@@ -100,7 +100,7 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
 
         outstanding = max(loan, 0.0)
         rows.append((month, disbursed, investment, total_interest, outstanding,
-                     investment - outstanding - cash_paid))
+                     investment - outstanding - pending_interest - cash_paid))
 
     total_fees = arrangement_fee + debit_fee * repay_months
     total_cost = disbursed + total_interest + total_fees - compensation
