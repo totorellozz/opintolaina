@@ -92,7 +92,6 @@ class Row(NamedTuple):
     total_interest: float
     outstanding: float
     in_hand: float
-    pot_only: float
     grant_total: float
 
 
@@ -104,7 +103,7 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
     The loan, the starting pot and any grant surplus go into one fund. Living costs
     (net of the Kela grant, paid in the same 9 months as the loan) are taken out of it
     during the study years; those sales are taxed in the year they happen. The rest of
-    the fund is assumed sold in the last month. pot_only is the starting pot growing alone.
+    the fund is assumed sold in the last month.
     """
     monthly_rate = annual_rate_pct / 100 / 12
     monthly_growth = (1 + (fund_growth_pct - fund_fee_pct) / 100) ** (1 / 12) - 1
@@ -119,7 +118,6 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
     pending_interest = 0.0
     total_interest = 0.0
     investment = starting_pot
-    pot_only = starting_pot
     price = 1.0                   # fund unit price index
     lots = [[1, starting_pot, starting_pot]] if starting_pot > 0 else []  # [buy_month, units, cost]
     carried_losses = []
@@ -176,7 +174,6 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
         interest = loan * monthly_rate
         total_interest += interest
         investment *= 1 + monthly_growth
-        pot_only *= 1 + monthly_growth
         price *= 1 + monthly_growth
 
         capitalising = (in_study or (in_grace and grace_month <= GRACE_CAPITALISE_UNTIL))
@@ -209,7 +206,7 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
         outstanding = max(loan, 0.0)
         rows.append(Row(month, disbursed, investment, total_interest, outstanding,
                         investment - outstanding - pending_interest - cash_paid,
-                        pot_only, grant_total))
+                        grant_total))
 
     last_month = len(rows)
     total_fees = arrangement_fee + debit_fee * repay_months
@@ -220,10 +217,6 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
     sales, gain = sell_lots(lots, sum(lot[1] for lot in lots), price, last_month)
     final_tax = year_tax(sales, gain, carried_losses, (last_month - 1) // 12)
     tax = study_tax + final_tax
-
-    pot_sales, pot_gain = sell_lots([[1, starting_pot, starting_pot]] if starting_pot > 0 else [],
-                                    starting_pot, pot_only / starting_pot if starting_pot else 1.0, last_month)
-    pot_only_taxed = pot_only - year_tax(pot_sales, pot_gain, [], 0)
 
     summary = {
         "disbursed": disbursed,
@@ -239,8 +232,8 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
         "study_tax": study_tax,
         "final_tax": final_tax,
         "taxed_revenue": net_revenue - tax,
-        "pot_only": pot_only,
-        "extra_vs_pot_only": net_revenue - tax + withdrawals - pot_only_taxed,  # living costs are spent either way
+        # what you end with after loan costs and tax, plus living costs (spent either way), minus your own pot
+        "win": net_revenue - tax + withdrawals - starting_pot,
         "living_withdrawn": withdrawals,
         "living_shortfall": shortfall,
         "grant_total": grant_total,

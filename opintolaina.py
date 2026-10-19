@@ -14,7 +14,7 @@ rows, s = simulate(i.monthly_pay, i.years_support, i.repayment_years, rate, i.gr
 for r in rows:
     print(f"Month {r.month}: disbursed {r.disbursed:.2f}€, outstanding loan {r.outstanding:.2f}€, "
           f"interest total {r.total_interest:.2f}€, investment {r.investment:.2f}€, "
-          f"in hand {r.in_hand:.2f}€, pot only {r.pot_only:.2f}€, grant received {r.grant_total:.2f}€")
+          f"in hand {r.in_hand:.2f}€, grant received {r.grant_total:.2f}€")
 
 payoff = next((r.month for r in rows
                if r.month > i.years_support * 12 and r.investment >= r.outstanding), None)
@@ -31,14 +31,13 @@ print(f"Kela grant received: {s['grant_total']:.2f}€")
 print(f"Living costs taken from the fund: {s['living_withdrawn']:.2f}€")
 if s["living_shortfall"] > 0:
     print(f"WARNING: fund ran dry, {s['living_shortfall']:.2f}€ of living costs were not covered")
-print(f"Total value of investment: {s['investment']:.2f}€")
 print(f"In hand (investment minus loan costs): {s['net_revenue']:.2f}€")
 print(f"Capital income tax on fund sales: {s['tax']:.2f}€ "
       f"(living-cost sales during studies {s['study_tax']:.2f}€ + final sale {s['final_tax']:.2f}€)")
 print(f"In hand after tax: {s['taxed_revenue']:.2f}€")
-print(f"Starting pot alone would be: {s['pot_only']:.2f}€")
-print(f"Extra from the loan strategy vs pot alone (after tax, living costs added back): {s['extra_vs_pot_only']:.2f}€")
+print(f"\nPot + loan, total value of the fund: {s['investment']:.2f}€")
+print(f"What you win (after loan costs and tax, living costs added back, minus your own pot): {s['win']:.2f}€")
 if s["disbursed"]:
-    print(f"You made {s['extra_vs_pot_only'] / s['disbursed']:.2f} X of your loan")
+    print(f"You made {s['win'] / s['disbursed']:.2f} X of your loan")
 
 save_outputs(rows)

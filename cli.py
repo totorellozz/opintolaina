@@ -91,7 +91,7 @@ def open_file(path):
 
 def save_outputs(rows, png="opintolaina.png", csv_path="opintolaina_data.csv"):
     """Write the chart and CSV from simulate() rows, then open both."""
-    months, disbursed, investment, interest, outstanding, in_hand, pot_only, grant_total = zip(*rows)
+    months, disbursed, investment, interest, outstanding, in_hand, grant_total = zip(*rows)
 
     plt.figure(figsize=(10, 6))
     plt.plot(months, disbursed, label="Loan Disbursed (€)")
@@ -99,7 +99,6 @@ def save_outputs(rows, png="opintolaina.png", csv_path="opintolaina_data.csv"):
     plt.plot(months, interest, label="Total Interest (€)")
     plt.plot(months, outstanding, label="Outstanding Loan (€)")
     plt.plot(months, in_hand, label="In Hand (€)")
-    plt.plot(months, pot_only, label="Starting Pot Only (€)")
     plt.plot(months, grant_total, label="Kela Grant Received (€)")
     plt.xlabel("Months")
     plt.ylabel("Amount (€)")
@@ -113,7 +112,7 @@ def save_outputs(rows, png="opintolaina.png", csv_path="opintolaina_data.csv"):
         writer = csv.writer(f)
         writer.writerow(["Month", "Loan Balance (€)", "Investment Value (€)",
                          "Total Interest (€)", "Remaining Loan (€)", "In Hand (€)",
-                         "Starting Pot Only (€)", "Kela Grant Received (€)"])
+                         "Kela Grant Received (€)"])
         writer.writerows(rows)
 
     open_file(png)
