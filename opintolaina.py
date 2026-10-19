@@ -33,7 +33,8 @@ if s["living_shortfall"] > 0:
     print(f"WARNING: fund ran dry, {s['living_shortfall']:.2f}€ of living costs were not covered")
 print(f"Total value of investment: {s['investment']:.2f}€")
 print(f"In hand (investment minus loan costs): {s['net_revenue']:.2f}€")
-print(f"Capital income tax on fund gain: {s['tax']:.2f}€")
+print(f"Capital income tax on fund sales: {s['tax']:.2f}€ "
+      f"(living-cost sales during studies {s['study_tax']:.2f}€ + final sale {s['final_tax']:.2f}€)")
 print(f"In hand after tax: {s['taxed_revenue']:.2f}€")
 print(f"Starting pot alone would be: {s['pot_only']:.2f}€")
 print(f"Extra from the loan strategy vs pot alone (after tax, living costs added back): {s['extra_vs_pot_only']:.2f}€")

@@ -1,6 +1,7 @@
 """Finnish higher-education opintolaina model, rules as of 2026-10 (Kela, Nordea, vero.fi).
 
 Timeline: month 1 = January. Draw Jan-May, pause Jun-Aug, draw Sep-Dec.
+Study years end in December; the last aid month is December.
 """
 
 from typing import NamedTuple
@@ -9,8 +10,9 @@ MAX_MONTHLY_LOAN = 850          # state guarantee cap per aid month, age 18+, st
 AID_MONTHS_PER_YEAR = 9
 AID_CALENDAR_MONTHS = (1, 2, 3, 4, 5, 9, 10, 11, 12)  # drawn monthly
 CAPITALISE_MONTHS = (6, 12)     # bank capitalises interest 15 Jun and 15 Dec
-GRACE_MONTHS = 12               # after aid ends: one more capitalisation term, then interest-only
+GRACE_MONTHS = 18               # after aid ends: Nordea says repayment starts 1.5-2 years later
 GRACE_CAPITALISE_UNTIL = 6      # grace month (Jun) of the last capitalisation
+INTEREST_BILLING_MONTHS = (6, 12)  # interest-only period: billed half-yearly, 15 Jun and 15 Dec
 
 # Lainahyvitys (loan compensation): 40% of counted loan above 2500 EUR
 COMP_RATE = 0.40
@@ -18,9 +20,15 @@ COMP_THRESHOLD = 2500
 COMP_MONTHLY_LIMIT = 400
 COMP_MAX_COUNTED = {180: 10800, 300: 18000}
 
+# Capital income tax (vero.fi)
 CAPITAL_TAX_LOW = 0.30
 CAPITAL_TAX_HIGH = 0.34
 CAPITAL_TAX_LIMIT = 30000
+OLETTAMA_RATE = 0.20            # hankintameno-olettama: 20% of sale price
+OLETTAMA_RATE_LONG = 0.40       # 40% if held at least 10 years
+OLETTAMA_LONG_MONTHS = 120
+SMALL_SALES_LIMIT = 1000        # gains tax-free if the year's total sales are at most this
+LOSS_CARRY_YEARS = 5
 
 
 def loan_compensation(monthly_pay, years_support, degree_credits):
@@ -30,11 +38,51 @@ def loan_compensation(monthly_pay, years_support, degree_credits):
 
 
 def capital_income_tax(gain):
-    """30% up to 30 000 EUR, 34% only on the part above it. Losses give no refund here."""
+    """30% up to 30 000 EUR, 34% only on the part above it."""
     if gain <= 0:
         return 0.0
     return (CAPITAL_TAX_LOW * min(gain, CAPITAL_TAX_LIMIT)
             + CAPITAL_TAX_HIGH * max(gain - CAPITAL_TAX_LIMIT, 0))
+
+
+def sell_lots(lots, units, price, month):
+    """Sell units first-in-first-out from lots [buy_month, units, cost].
+
+    Each lot's gain is sale price minus the larger of actual cost and the
+    hankintameno-olettama (20% of sale, 40% if held 10+ years): the taxpayer
+    picks whichever gives the smaller gain. Returns (sales, gain).
+    """
+    sales = gain = 0.0
+    while units > 1e-9 and lots:
+        lot = lots[0]
+        sold = min(lot[1], units)
+        cost = lot[2] * sold / lot[1]
+        proceeds = sold * price
+        rate = OLETTAMA_RATE_LONG if month - lot[0] >= OLETTAMA_LONG_MONTHS else OLETTAMA_RATE
+        gain += proceeds - max(cost, rate * proceeds)
+        sales += proceeds
+        lot[1] -= sold
+        lot[2] -= cost
+        units -= sold
+        if lot[1] <= 1e-9:
+            lots.pop(0)
+    return sales, gain
+
+
+def year_tax(sales, gain, carried_losses, year):
+    """Tax for one calendar year's sales. carried_losses is [[year, loss], ...], updated in place."""
+    if sales <= SMALL_SALES_LIMIT:
+        return 0.0
+    carried_losses[:] = [c for c in carried_losses if year - c[0] <= LOSS_CARRY_YEARS]
+    if gain < 0:
+        carried_losses.append([year, -gain])
+        return 0.0
+    for c in carried_losses:
+        used = min(c[1], gain)
+        c[1] -= used
+        gain -= used
+    carried_losses[:] = [c for c in carried_losses if c[1] > 1e-9]
+    return capital_income_tax(gain)
 
 
 class Row(NamedTuple):
@@ -55,7 +103,8 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
 
     The loan, the starting pot and any grant surplus go into one fund. Living costs
     (net of the Kela grant, paid in the same 9 months as the loan) are taken out of it
-    during the study years. pot_only is the starting pot growing alone.
+    during the study years; those sales are taxed in the year they happen. The rest of
+    the fund is assumed sold in the last month. pot_only is the starting pot growing alone.
     """
     monthly_rate = annual_rate_pct / 100 / 12
     monthly_growth = (1 + (fund_growth_pct - fund_fee_pct) / 100) ** (1 / 12) - 1
@@ -63,7 +112,7 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
     study_months = years_support * 12
     repay_months = repayment_years * 12 - study_months - GRACE_MONTHS
     if repay_months <= 0:
-        raise ValueError("repayment_years must exceed study years + 1 year grace period")
+        raise ValueError("repayment_years must exceed study years + 1.5 year grace period")
 
     loan = 0.0            # outstanding principal incl. capitalised interest
     disbursed = 0.0
@@ -71,7 +120,11 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
     total_interest = 0.0
     investment = starting_pot
     pot_only = starting_pot
-    deposits = starting_pot       # everything put into the fund (for the tax base)
+    price = 1.0                   # fund unit price index
+    lots = [[1, starting_pot, starting_pot]] if starting_pot > 0 else []  # [buy_month, units, cost]
+    carried_losses = []
+    year_sales = year_gain = 0.0
+    study_tax = 0.0
     withdrawals = 0.0             # living costs taken out of the fund
     shortfall = 0.0               # living costs the fund could not cover
     grant_total = 0.0
@@ -79,6 +132,11 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
     rows = []
     compensation = 0.0
     payment = 0.0
+
+    def deposit(amount, month):
+        nonlocal investment
+        investment += amount
+        lots.append([month, amount / price, amount])
 
     for month in range(1, study_months + GRACE_MONTHS + repay_months + 1):
         in_study = month <= study_months
@@ -92,18 +150,21 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
         if in_study and calendar in AID_CALENDAR_MONTHS:
             loan += monthly_pay
             disbursed += monthly_pay
-            investment += monthly_pay
-            deposits += monthly_pay
+            deposit(monthly_pay, month)
 
         if in_study:
             grant = kela_grant if calendar in AID_CALENDAR_MONTHS else 0.0
             grant_total += grant
             net = grant - living_cost_yearly / 12
             if net >= 0:
-                investment += net
-                deposits += net
+                if net:
+                    deposit(net, month)
             else:
                 taken = min(-net, investment)
+                if taken:
+                    sales, gain = sell_lots(lots, taken / price, price, month)
+                    year_sales += sales
+                    year_gain += gain
                 investment -= taken
                 withdrawals += taken
                 shortfall += -net - taken
@@ -116,6 +177,7 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
         total_interest += interest
         investment *= 1 + monthly_growth
         pot_only *= 1 + monthly_growth
+        price *= 1 + monthly_growth
 
         capitalising = (in_study or (in_grace and grace_month <= GRACE_CAPITALISE_UNTIL))
         if capitalising:
@@ -125,7 +187,10 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
                 loan += pending_interest
                 pending_interest = 0.0
         elif in_grace:
-            cash_paid += interest        # interest-only months before repayment starts
+            pending_interest += interest       # interest-only: billed 15 Jun and 15 Dec
+            if calendar in INTEREST_BILLING_MONTHS:
+                cash_paid += pending_interest
+                pending_interest = 0.0
         else:
             if month == study_months + GRACE_MONTHS + 1:
                 loan += pending_interest
@@ -137,17 +202,29 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
             loan -= payment - interest
             cash_paid += payment + debit_fee
 
+        if in_study and calendar == 12:
+            study_tax += year_tax(year_sales, year_gain, carried_losses, (month - 1) // 12)
+            year_sales = year_gain = 0.0
+
         outstanding = max(loan, 0.0)
         rows.append(Row(month, disbursed, investment, total_interest, outstanding,
                         investment - outstanding - pending_interest - cash_paid,
                         pot_only, grant_total))
 
+    last_month = len(rows)
     total_fees = arrangement_fee + debit_fee * repay_months
     total_cost = disbursed + total_interest + total_fees - compensation
     net_revenue = investment - total_cost
-    # Student-loan interest is not deductible, so tax is on fund gain alone.
-    tax = capital_income_tax(investment + withdrawals - deposits)
-    pot_only_taxed = pot_only - capital_income_tax(pot_only - starting_pot)
+
+    # Student-loan interest is not deductible, so tax is on the fund sales alone.
+    sales, gain = sell_lots(lots, sum(lot[1] for lot in lots), price, last_month)
+    final_tax = year_tax(sales, gain, carried_losses, (last_month - 1) // 12)
+    tax = study_tax + final_tax
+
+    pot_sales, pot_gain = sell_lots([[1, starting_pot, starting_pot]] if starting_pot > 0 else [],
+                                    starting_pot, pot_only / starting_pot if starting_pot else 1.0, last_month)
+    pot_only_taxed = pot_only - year_tax(pot_sales, pot_gain, [], 0)
+
     summary = {
         "disbursed": disbursed,
         "total_interest": total_interest,
@@ -159,6 +236,8 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
         "total_cost": total_cost,
         "net_revenue": net_revenue,
         "tax": tax,
+        "study_tax": study_tax,
+        "final_tax": final_tax,
         "taxed_revenue": net_revenue - tax,
         "pot_only": pot_only,
         "extra_vs_pot_only": net_revenue - tax + withdrawals - pot_only_taxed,  # living costs are spent either way
