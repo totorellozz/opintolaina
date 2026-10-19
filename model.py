@@ -1,16 +1,14 @@
 """Finnish higher-education opintolaina model, rules as of 2026-10 (Kela, Nordea, vero.fi).
 
-Timeline: month 1 = August of the first study year.
+Timeline: month 1 = January. Draw Jan-May, pause Jun-Aug, draw Sep-Dec.
 """
 
 MAX_MONTHLY_LOAN = 850          # state guarantee cap per aid month, age 18+, studying in Finland
 AID_MONTHS_PER_YEAR = 9
-AUTUMN_MONTHS = 4               # Sep-Dec, withdrawn in August
-SPRING_MONTHS = 5               # Jan-May, withdrawn in January
-DISBURSE_MONTHS = {1: AUTUMN_MONTHS, 6: SPRING_MONTHS}
-CAPITALISE_MONTHS = (5, 11)     # bank capitalises interest 15 Dec and 15 Jun
+AID_CALENDAR_MONTHS = (1, 2, 3, 4, 5, 9, 10, 11, 12)  # drawn monthly
+CAPITALISE_MONTHS = (6, 12)     # bank capitalises interest 15 Jun and 15 Dec
 GRACE_MONTHS = 12               # after aid ends: one more capitalisation term, then interest-only
-GRACE_CAPITALISE_UNTIL = 5      # grace month (Dec) of the last capitalisation
+GRACE_CAPITALISE_UNTIL = 6      # grace month (Jun) of the last capitalisation
 
 # Lainahyvitys (loan compensation): 40% of counted loan above 2500 EUR
 COMP_RATE = 0.40
@@ -63,11 +61,10 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
         in_grace = 0 < grace_month <= GRACE_MONTHS
         calendar = (month - 1) % 12 + 1
 
-        if in_study and calendar in DISBURSE_MONTHS:
-            amount = monthly_pay * DISBURSE_MONTHS[calendar]
-            loan += amount
-            disbursed += amount
-            investment += amount
+        if in_study and calendar in AID_CALENDAR_MONTHS:
+            loan += monthly_pay
+            disbursed += monthly_pay
+            investment += monthly_pay
 
         if grace_month == 1 and degree_credits:
             compensation = min(loan, loan_compensation(monthly_pay, years_support, degree_credits))
