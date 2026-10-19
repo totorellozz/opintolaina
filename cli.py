@@ -1,5 +1,14 @@
+import csv
+import os
+import subprocess
+import sys
+
+import matplotlib
 import requests
 from bs4 import BeautifulSoup
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 from model import MAX_MONTHLY_LOAN, COMP_MAX_COUNTED
 
@@ -52,3 +61,39 @@ def ask_inputs():
             raise SystemExit(f"Degree size must be one of {sorted(COMP_MAX_COUNTED)}")
 
     return monthly_pay, growth, years_support, repayment_years, degree_credits
+
+
+def open_file(path):
+    if sys.platform == "darwin":
+        subprocess.run(["open", path], check=False)
+    elif sys.platform == "win32":
+        os.startfile(path)
+    else:
+        subprocess.run(["xdg-open", path], check=False)
+
+
+def save_outputs(rows, png="opintolaina.png", csv_path="opintolaina_data.csv"):
+    """Write the chart and CSV from simulate() rows, then open both."""
+    months, disbursed, investment, interest, outstanding = zip(*rows)
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(months, disbursed, label="Loan Disbursed (€)")
+    plt.plot(months, investment, label="Investment Value (€)")
+    plt.plot(months, interest, label="Total Interest (€)")
+    plt.plot(months, outstanding, label="Outstanding Loan (€)")
+    plt.xlabel("Months")
+    plt.ylabel("Amount (€)")
+    plt.title("Loan, Investment, and Interest Over Time")
+    plt.legend()
+    plt.grid()
+    plt.savefig(png, bbox_inches="tight")
+    plt.close()
+
+    with open(csv_path, mode="w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Month", "Loan Balance (€)", "Investment Value (€)",
+                         "Total Interest (€)", "Remaining Loan (€)"])
+        writer.writerows(rows)
+
+    open_file(png)
+    open_file(csv_path)
