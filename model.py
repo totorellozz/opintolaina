@@ -1,13 +1,14 @@
 """Finnish higher-education opintolaina model, rules as of 2026-10 (Kela, Nordea, vero.fi).
 
 Timeline: month 1 = January. Draw Jan-May, pause Jun-Aug, draw Sep-Dec.
-Study years end in December; the last aid month is December.
+The study period ends in the month of the last aid month (total support months).
 """
 
 from typing import NamedTuple
 
 MAX_MONTHLY_LOAN = 850          # state guarantee cap per aid month, age 18+, studying in Finland
 AID_MONTHS_PER_YEAR = 9
+SUPPORT_MONTH_LIMIT = {180: 30, 300: 48}   # Kela, studies started on/after 1.8.2017
 AID_CALENDAR_MONTHS = (1, 2, 3, 4, 5, 9, 10, 11, 12)  # drawn monthly
 CAPITALISE_MONTHS = (6, 12)     # bank capitalises interest 15 Jun and 15 Dec
 GRACE_MONTHS = 18               # after aid ends: Nordea says repayment starts 1.5-2 years later
@@ -31,8 +32,18 @@ SMALL_SALES_LIMIT = 1000        # gains tax-free if the year's total sales are a
 LOSS_CARRY_YEARS = 5
 
 
-def loan_compensation(monthly_pay, years_support, degree_credits):
-    counted = min(monthly_pay, COMP_MONTHLY_LIMIT) * AID_MONTHS_PER_YEAR * years_support
+def last_aid_month(aid_months):
+    """Model month in which the aid_months-th aid month falls (month 1 = January)."""
+    count = month = 0
+    while count < aid_months:
+        month += 1
+        if (month - 1) % 12 + 1 in AID_CALENDAR_MONTHS:
+            count += 1
+    return month
+
+
+def loan_compensation(monthly_pay, aid_months, degree_credits):
+    counted = min(monthly_pay, COMP_MONTHLY_LIMIT) * aid_months
     counted = min(counted, COMP_MAX_COUNTED[degree_credits])
     return max(0.0, COMP_RATE * (counted - COMP_THRESHOLD))
 
@@ -95,7 +106,7 @@ class Row(NamedTuple):
     grant_total: float
 
 
-def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_growth_pct,
+def simulate(monthly_pay, aid_months, repayment_years, annual_rate_pct, fund_growth_pct,
              fund_fee_pct, debit_fee, arrangement_fee, degree_credits=None,
              starting_pot=0.0, living_cost_yearly=0.0, kela_grant=0.0):
     """Returns (rows, summary). degree_credits=None means no loan compensation.
@@ -108,10 +119,17 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
     monthly_rate = annual_rate_pct / 100 / 12
     monthly_growth = (1 + (fund_growth_pct - fund_fee_pct) / 100) ** (1 / 12) - 1
 
-    study_months = years_support * 12
-    repay_months = repayment_years * 12 - study_months - GRACE_MONTHS
+    if aid_months < 1:
+        raise ValueError("aid_months must be at least 1")
+    study_end = last_aid_month(aid_months)
+    repay_start = study_end + GRACE_MONTHS + 1
+    repay_months = repayment_years * 12 - (repay_start - 1)
     if repay_months <= 0:
-        raise ValueError("repayment_years must exceed study years + 1.5 year grace period")
+        raise ValueError("repayment_years must exceed the study period + 1.5 year grace period")
+    # Bank capitalises one more time after the first 15 Jun/15 Dec on or after the last aid month.
+    final_cap = [m for m in range(study_end, study_end + 13)
+                 if (m - 1) % 12 + 1 in CAPITALISE_MONTHS][1]
+    aid_count = 0
 
     loan = 0.0            # outstanding principal incl. capitalised interest
     disbursed = 0.0
@@ -136,22 +154,22 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
         investment += amount
         lots.append([month, amount / price, amount])
 
-    for month in range(1, study_months + GRACE_MONTHS + repay_months + 1):
-        in_study = month <= study_months
-        grace_month = month - study_months
-        in_grace = 0 < grace_month <= GRACE_MONTHS
+    for month in range(1, repay_start + repay_months):
+        in_study = month <= study_end
         calendar = (month - 1) % 12 + 1
+        aid_now = in_study and calendar in AID_CALENDAR_MONTHS and aid_count < aid_months
+        aid_count += aid_now
 
         if month == 1:
             cash_paid += arrangement_fee
 
-        if in_study and calendar in AID_CALENDAR_MONTHS:
+        if aid_now:
             loan += monthly_pay
             disbursed += monthly_pay
             deposit(monthly_pay, month)
 
         if in_study:
-            grant = kela_grant if calendar in AID_CALENDAR_MONTHS else 0.0
+            grant = kela_grant if aid_now else 0.0
             grant_total += grant
             net = grant - living_cost_yearly / 12
             if net >= 0:
@@ -167,8 +185,8 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
                 withdrawals += taken
                 shortfall += -net - taken
 
-        if grace_month == 1 and degree_credits:
-            compensation = min(loan, loan_compensation(monthly_pay, years_support, degree_credits))
+        if month == study_end + 1 and degree_credits:
+            compensation = min(loan, loan_compensation(monthly_pay, aid_months, degree_credits))
             loan -= compensation
 
         interest = loan * monthly_rate
@@ -176,21 +194,19 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
         investment *= 1 + monthly_growth
         price *= 1 + monthly_growth
 
-        capitalising = (in_study or (in_grace and grace_month <= GRACE_CAPITALISE_UNTIL))
-        if capitalising:
+        if month <= final_cap:
             pending_interest += interest
-            capitalise_now = (calendar in CAPITALISE_MONTHS) if in_study else grace_month == GRACE_CAPITALISE_UNTIL
-            if capitalise_now:
+            if calendar in CAPITALISE_MONTHS:
                 loan += pending_interest
                 pending_interest = 0.0
-        elif in_grace:
+        elif month < repay_start:
             pending_interest += interest       # interest-only: billed 15 Jun and 15 Dec
             if calendar in INTEREST_BILLING_MONTHS:
                 cash_paid += pending_interest
                 pending_interest = 0.0
         else:
-            if month == study_months + GRACE_MONTHS + 1:
-                loan += pending_interest
+            if month == repay_start:
+                cash_paid += pending_interest  # interest accrued since the last billing
                 pending_interest = 0.0
                 if monthly_rate:
                     payment = loan * monthly_rate / (1 - (1 + monthly_rate) ** -repay_months)
@@ -199,7 +215,7 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
             loan -= payment - interest
             cash_paid += payment + debit_fee
 
-        if in_study and calendar == 12:
+        if in_study and (calendar == 12 or month == study_end):
             study_tax += year_tax(year_sales, year_gain, carried_losses, (month - 1) // 12)
             year_sales = year_gain = 0.0
 
@@ -237,5 +253,6 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
         "living_withdrawn": withdrawals,
         "living_shortfall": shortfall,
         "grant_total": grant_total,
+        "study_end": study_end,
     }
     return rows, summary

@@ -7,7 +7,7 @@ first_date, euribor12 = euribor_get()
 print(f"Euribor {first_date} Rate: {euribor12}")
 rate = euribor12 + MARGIN
 
-rows, s = simulate(i.monthly_pay, i.years_support, i.repayment_years, rate, i.growth, i.fund_fee,
+rows, s = simulate(i.monthly_pay, i.aid_months, i.repayment_years, rate, i.growth, i.fund_fee,
                    DEBIT_FEE, ARRANGEMENT_FEE, i.degree_credits,
                    i.starting_pot, i.living_cost_yearly, i.kela_grant)
 
@@ -17,7 +17,7 @@ for r in rows:
           f"in hand {r.in_hand:.2f}€, grant received {r.grant_total:.2f}€")
 
 payoff = next((r.month for r in rows
-               if r.month > i.years_support * 12 and r.investment >= r.outstanding), None)
+               if r.month > s['study_end'] and r.investment >= r.outstanding), None)
 if payoff:
     print(f"You could pay your loan off from the fund at month {payoff}!")
 

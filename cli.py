@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from model import MAX_MONTHLY_LOAN, COMP_MAX_COUNTED
+from model import MAX_MONTHLY_LOAN, COMP_MAX_COUNTED, SUPPORT_MONTH_LIMIT
 
 MARGIN = 0.5            # bank margin, %; typical (Nordea example 2026)
 DEBIT_FEE = 2.5         # per repayment instalment, EUR
@@ -26,7 +26,7 @@ class Inputs(NamedTuple):
     starting_pot: float
     living_cost_yearly: float
     kela_grant: float
-    years_support: int
+    aid_months: int
     repayment_years: int
     degree_credits: int | None
 
@@ -52,7 +52,7 @@ def ask_inputs():
     starting_pot = float(input("Investments you already have, put into the same fund (€, 0 for none): "))
     living_cost_yearly = float(input("Your living costs per year (€, paid from the fund during studies): "))
     kela_grant = float(input("Kela grant per month (€, paid 9 months a year, offsets living costs): "))
-    years_support = int(input("Length of your support from the state (years): "))
+    aid_months = int(input("Total Kela support months you will use (9 a year; 48 is the max for a 300-credit degree): "))
     repayment = input("Do you have a program of repayment to the state yet? (y/n): ")
 
     repayment_years = DEFAULT_REPAYMENT_YEARS
@@ -75,9 +75,12 @@ def ask_inputs():
         degree_credits = int(input(f"Degree size in credits {sorted(COMP_MAX_COUNTED)}: "))
         if degree_credits not in COMP_MAX_COUNTED:
             raise SystemExit(f"Degree size must be one of {sorted(COMP_MAX_COUNTED)}")
+        limit = SUPPORT_MONTH_LIMIT[degree_credits]
+        if aid_months > limit:
+            print(f"Note: Kela allows {limit} support months for {degree_credits} credits (studies started 1.8.2017 or later).")
 
     return Inputs(monthly_pay, growth, fund_fee, starting_pot, living_cost_yearly, kela_grant,
-                  years_support, repayment_years, degree_credits)
+                  aid_months, repayment_years, degree_credits)
 
 
 def open_file(path):
