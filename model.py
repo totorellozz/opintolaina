@@ -51,7 +51,8 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
     pending_interest = 0.0
     total_interest = 0.0
     investment = 0.0
-    rows = []             # (month, disbursed, investment, total_interest, outstanding)
+    cash_paid = 0.0       # cash paid to the bank so far: interest-only, instalments, fees
+    rows = []             # (month, disbursed, investment, total_interest, outstanding, in_hand)
     compensation = 0.0
     payment = 0.0
 
@@ -60,6 +61,9 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
         grace_month = month - study_months
         in_grace = 0 < grace_month <= GRACE_MONTHS
         calendar = (month - 1) % 12 + 1
+
+        if month == 1:
+            cash_paid += arrangement_fee
 
         if in_study and calendar in AID_CALENDAR_MONTHS:
             loan += monthly_pay
@@ -81,7 +85,9 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
             if capitalise_now:
                 loan += pending_interest
                 pending_interest = 0.0
-        elif month > study_months + GRACE_MONTHS:
+        elif in_grace:
+            cash_paid += interest        # interest-only months before repayment starts
+        else:
             if month == study_months + GRACE_MONTHS + 1:
                 loan += pending_interest
                 pending_interest = 0.0
@@ -90,8 +96,11 @@ def simulate(monthly_pay, years_support, repayment_years, annual_rate_pct, fund_
                 else:
                     payment = loan / repay_months
             loan -= payment - interest
+            cash_paid += payment + debit_fee
 
-        rows.append((month, disbursed, investment, total_interest, max(loan, 0.0)))
+        outstanding = max(loan, 0.0)
+        rows.append((month, disbursed, investment, total_interest, outstanding,
+                     investment - outstanding - cash_paid))
 
     total_fees = arrangement_fee + debit_fee * repay_months
     total_cost = disbursed + total_interest + total_fees - compensation

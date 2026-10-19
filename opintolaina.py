@@ -10,11 +10,11 @@ rate = euribor12 + MARGIN
 rows, s = simulate(monthly_pay, years_support, repayment_years, rate, growth,
                    FUND_FEE, DEBIT_FEE, ARRANGEMENT_FEE, degree_credits)
 
-for month, disbursed, investment, interest, outstanding in rows:
+for month, disbursed, investment, interest, outstanding, in_hand in rows:
     print(f"Month {month}: disbursed {disbursed:.2f}€, outstanding loan {outstanding:.2f}€, "
-          f"interest total {interest:.2f}€, investment {investment:.2f}€")
+          f"interest total {interest:.2f}€, investment {investment:.2f}€, in hand {in_hand:.2f}€")
 
-payoff = next((m for m, _, inv, _, out in rows if m > years_support * 12 and inv >= out), None)
+payoff = next((m for m, _, inv, _, out, _ in rows if m > years_support * 12 and inv >= out), None)
 if payoff:
     print(f"You could pay your loan off from the fund at month {payoff}!")
 
