@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Opintolaina calculator</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --ring: rgba(11, 11, 11, 0.10);
+    --s1: #2a78d6;
+    --s2: #eb6834;
+    --s3: #1baf7a;
+    --s4: #eda100;
+    --warn-bg: #fff4d6;
+    --warn-ink: #5a4100;
+    --err-ink: #a52a2a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --ink: #f0efec;
+      --ink-2: #c3c2b7;
+      --muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --ring: rgba(255, 255, 255, 0.10);
+      --s1: #3987e5;
+      --s2: #d95926;
+      --s3: #199e70;
+      --s4: #c98500;
+      --warn-bg: #3a2f10;
+      --warn-ink: #f3d98a;
+      --err-ink: #f19a9a;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #f0efec;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --ring: rgba(255, 255, 255, 0.10);
+    --s1: #3987e5;
+    --s2: #d95926;
+    --s3: #199e70;
+    --s4: #c98500;
+    --warn-bg: #3a2f10;
+    --warn-ink: #f3d98a;
+    --err-ink: #f19a9a;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 24px 16px 48px; }
+  header h1 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
+  header p { margin: 0; color: var(--ink-2); }
+
+  .layout { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 20px; margin-top: 20px; align-items: start; }
+  @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+  .card { background: var(--surface); border-radius: 12px; box-shadow: 0 0 0 1px var(--ring); }
+  .controls { padding: 8px 16px 16px; position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+  @media (max-width: 900px) { .controls { position: static; max-height: none; } }
+  .controls h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; font-weight: 600; }
+  .controls h2:first-child { margin-top: 10px; }
+
+  .field { margin: 0 0 12px; }
+  .field .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .field label { color: var(--ink-2); font-size: 13px; }
+  .field .num { display: flex; align-items: baseline; gap: 4px; }
+  .field input[type=number] {
+    width: 84px; text-align: right; font: inherit; font-size: 14px; font-weight: 600; color: var(--ink);
+    background: transparent; border: 0; border-bottom: 1px solid var(--axis); padding: 1px 2px;
+    -moz-appearance: textfield;
+  }
+  .field input[type=number]::-webkit-outer-spin-button,
+  .field input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .field input[type=number]:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; border-radius: 2px; }
+  .field .unit { color: var(--muted); font-size: 12px; min-width: 38px; }
+  .field input[type=range] { width: 100%; accent-color: var(--s1); margin: 6px 0 0; }
+  .field input[type=range]:focus-visible { outline: 2px solid var(--s1); outline-offset: 3px; border-radius: 4px; }
+  .seg { display: flex; gap: 4px; margin-top: 6px; }
+  .seg button {
+    flex: 1; font: inherit; font-size: 13px; padding: 6px 4px; color: var(--ink-2); background: transparent;
+    border: 0; border-radius: 8px; box-shadow: 0 0 0 1px var(--axis); cursor: pointer;
+  }
+  .seg button[aria-pressed=true] { color: var(--ink); box-shadow: 0 0 0 2px var(--s1); font-weight: 600; }
+  .seg button:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+  .reset { margin-top: 14px; font: inherit; font-size: 13px; color: var(--ink-2); background: transparent;
+    border: 0; box-shadow: 0 0 0 1px var(--axis); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+  .reset:hover { color: var(--ink); }
+
+  .results { display: grid; gap: 16px; min-width: 0; }
+  .hero { padding: 20px 20px 16px; }
+  .hero .label { color: var(--ink-2); font-size: 13px; }
+  .hero .value { font-size: 56px; font-weight: 650; line-height: 1.1; margin: 2px 0 4px; letter-spacing: -.01em; }
+  .hero .sub { color: var(--ink-2); font-size: 13px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .tile { padding: 12px 14px; }
+  .tile .label { color: var(--ink-2); font-size: 12px; }
+  .tile .value { font-size: 22px; font-weight: 600; margin-top: 2px; }
+  .tile .note { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+  .notices { display: grid; gap: 8px; }
+  .notice { padding: 8px 12px; border-radius: 8px; background: var(--warn-bg); color: var(--warn-ink); font-size: 13px; }
+  .notice.error { background: transparent; box-shadow: 0 0 0 1px var(--err-ink); color: var(--err-ink); }
+
+  .chartcard { padding: 16px 16px 12px; transition: opacity .15s; }
+  .chartcard.loading { opacity: .6; }
+  .chartcard h2 { margin: 0 0 2px; font-size: 15px; font-weight: 600; }
+  .chartcard .sub { margin: 0 0 8px; color: var(--ink-2); font-size: 13px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 4px 0 8px; font-size: 13px; color: var(--ink-2); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { display: inline-block; width: 16px; height: 0; border-top: 2px solid; border-radius: 2px; }
+  .chartbox { position: relative; }
+  svg { display: block; width: 100%; height: auto; overflow: visible; touch-action: pan-y; }
+  svg:focus-visible { outline: 2px solid var(--s1); outline-offset: 4px; border-radius: 4px; }
+  svg text { font: 12px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--muted); }
+  svg .mark-label { fill: var(--ink-2); }
+  .tip {
+    position: absolute; pointer-events: none; min-width: 190px; padding: 8px 10px; border-radius: 8px;
+    background: var(--surface); box-shadow: 0 0 0 1px var(--ring), 0 6px 20px rgba(0,0,0,.18);
+    font-size: 12px; color: var(--ink-2); opacity: 0; transition: opacity .08s; z-index: 2;
+  }
+  .tip.on { opacity: 1; }
+  .tip .when { color: var(--ink-2); margin-bottom: 4px; }
+  .tip .row { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+  .tip .row i { width: 12px; border-top: 2px solid; border-radius: 2px; flex: none; }
+  .tip .row b { color: var(--ink); font-weight: 600; margin-left: auto; padding-left: 12px; font-variant-numeric: tabular-nums; }
+
+  .tablebtn { margin-top: 8px; font: inherit; font-size: 13px; color: var(--ink-2); background: transparent; border: 0;
+    box-shadow: 0 0 0 1px var(--axis); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+  .tablebtn:hover { color: var(--ink); }
+  .tablewrap { overflow-x: auto; margin-top: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: right; padding: 6px 10px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  th { color: var(--ink-2); font-weight: 600; }
+  th:first-child, td:first-child { text-align: left; }
+  .foot { color: var(--muted); font-size: 12px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Opintolaina calculator</h1>
+    <p>Move a slider and the whole model reruns: loan, interest, fund, living costs, tax.</p>
+  </header>
+
+  <div class="layout">
+    <aside class="card controls" id="controls" aria-label="Inputs"></aside>
+
+    <main class="results">
+      <div class="notices" id="notices" aria-live="polite"></div>
+
+      <section class="card hero" aria-live="polite">
+        <div class="label">What you win</div>
+        <div class="value" id="win">–</div>
+        <div class="sub" id="winsub">After loan costs and tax, living costs added back, minus your own pot.</div>
+      </section>
+
+      <section class="tiles" id="tiles"></section>
+
+      <section class="card chartcard" id="chartcard">
+        <h2>Where the money goes over time</h2>
+        <p class="sub" id="chartsub"></p>
+        <div class="legend" id="legend"></div>
+        <div class="chartbox" id="chartbox"></div>
+        <button class="tablebtn" id="tablebtn" aria-expanded="false">Show table</button>
+        <div class="tablewrap" id="tablewrap" hidden></div>
+      </section>
+
+      <p class="foot">Model: Kela and bank rules as of October 2026. Interest rate is fixed at today's Euribor for the whole period.
+        Taxes assume the fund is sold when the loan is repaid. General information, not tax advice.</p>
+    </main>
+  </div>
+</div>
+
+<script id="config" type="application/json">/*CONFIG*/</script>
+<script>
+"use strict";
+const CONFIG = JSON.parse(document.getElementById("config").textContent);
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const SERIES = [
+  { idx: 2, label: "Fund (pot + loan)", css: "--s1" },
+  { idx: 4, label: "Loan owed to the bank", css: "--s2" },
+  { idx: 5, label: "In hand (fund minus everything owed or paid)", css: "--s3" },
+  { idx: 3, label: "Interest (cumulative)", css: "--s4" },
+];
+const euro = new Intl.NumberFormat("fi-FI", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+const euro2 = new Intl.NumberFormat("fi-FI", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
+const fmt = n => euro.format(Math.round(n) === 0 ? 0 : n);   // avoids "-0 €"
+const compact = n => Math.abs(n) >= 1e6 ? (n / 1e6).toFixed(1) + "M" : Math.abs(n) >= 1000 ? (n / 1000) + "K" : String(n);
+const monthLabel = m => "Year " + Math.ceil(m / 12) + ", " + MONTHS[(m - 1) % 12];
+
+const state = {};
+const inputs = {};
+let degree = CONFIG.degree;
+let last = null;
+let timer = null, ctrl = null;
+
+/* ---------- controls ---------- */
+const controls = document.getElementById("controls");
+let group = null;
+for (const f of CONFIG.fields) {
+  state[f.key] = f.value;
+  if (f.group !== group) {
+    group = f.group;
+    const h = document.createElement("h2");
+    h.textContent = group;
+    controls.appendChild(h);
+    if (group === "Student loan") controls.appendChild(degreeField());
+  }
+  controls.appendChild(sliderField(f));
+}
+const reset = document.createElement("button");
+reset.className = "reset";
+reset.textContent = "Reset to my answers";
+reset.addEventListener("click", () => {
+  for (const f of CONFIG.fields) setValue(f, f.value);
+  degree = CONFIG.degree;
+  renderDegree();
+  schedule();
+});
+controls.appendChild(reset);
+
+function decimals(step) { return (String(step).split(".")[1] || "").length; }
+
+function sliderField(f) {
+  const wrap = document.createElement("div");
+  wrap.className = "field";
+  const top = document.createElement("div");
+  top.className = "top";
+  const label = document.createElement("label");
+  label.textContent = f.label;
+  label.htmlFor = "r_" + f.key;
+  const num = document.createElement("div");
+  num.className = "num";
+  const number = document.createElement("input");
+  number.type = "number";
+  number.id = "n_" + f.key;
+  number.min = f.min; number.max = f.max; number.step = f.step;
+  number.setAttribute("aria-label", f.label + " (" + f.unit + ")");
+  const unit = document.createElement("span");
+  unit.className = "unit";
+  unit.textContent = f.unit;
+  num.append(number, unit);
+  top.append(label, num);
+  const range = document.createElement("input");
+  range.type = "range";
+  range.id = "r_" + f.key;
+  range.min = f.min; range.max = f.max; range.step = f.step;
+  wrap.append(top, range);
+  inputs[f.key] = { range, number, field: f };
+  setValue(f, f.value);
+  range.addEventListener("input", () => { setValue(f, range.value); schedule(); });
+  number.addEventListener("input", () => {
+    if (number.value === "" || isNaN(number.value)) return;
+    setValue(f, number.value, true, false);
+    schedule();
+  });
+  number.addEventListener("blur", () => setValue(f, state[f.key]));
+  return wrap;
+}
+
+function setValue(f, raw, syncNumber = true, syncRange = true) {
+  const v = Math.min(f.max, Math.max(f.min, Number(raw)));
+  state[f.key] = v;
+  const { range, number } = inputs[f.key];
+  if (syncRange) range.value = v;
+  if (syncNumber) number.value = v.toFixed(decimals(f.step));
+}
+
+function degreeField() {
+  const wrap = document.createElement("div");
+  wrap.className = "field";
+  const label = document.createElement("label");
+  label.textContent = "Degree (for lainahyvitys, if you graduate on time)";
+  const seg = document.createElement("div");
+  seg.className = "seg";
+  seg.id = "degreeSeg";
+  for (const d of CONFIG.degrees) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = d.label;
+    b.dataset.value = d.value;
+    b.addEventListener("click", () => { degree = d.value; renderDegree(); schedule(); });
+    seg.appendChild(b);
+  }
+  wrap.append(label, seg);
+  queueMicrotask(renderDegree);
+  return wrap;
+}
+function renderDegree() {
+  for (const b of document.querySelectorAll("#degreeSeg button"))
+    b.setAttribute("aria-pressed", String(Number(b.dataset.value) === degree));
+}
+
+/* ---------- fetch ---------- */
+function schedule() {
+  clearTimeout(timer);
+  timer = setTimeout(run, 60);
+}
+
+async function run() {
+  if (ctrl) ctrl.abort();
+  ctrl = new AbortController();
+  const q = new URLSearchParams({ ...state, degree });
+  document.getElementById("chartcard").classList.add("loading");
+  try {
+    const res = await fetch("/api/simulate?" + q, { signal: ctrl.signal });
+    const data = await res.json();
+    if (!res.ok) { showNotices([], data.error); return; }
+    last = data;
+    const ry = inputs.repayment_years;
+    ry.range.min = ry.number.min = data.min_repayment_years;
+    if (state.repayment_years < data.min_repayment_years) setValue(ry.field, data.min_repayment_years);
+    render(data);
+    showNotices(data.warnings, null);
+  } catch (e) {
+    if (e.name !== "AbortError") showNotices([], "Lost connection to the script. Is it still running?");
+    return;
+  }
+  document.getElementById("chartcard").classList.remove("loading");
+}
+
+function showNotices(warnings, error) {
+  const box = document.getElementById("notices");
+  box.replaceChildren();
+  for (const w of warnings) addNotice(box, w, "notice");
+  if (error) addNotice(box, error, "notice error");
+}
+function addNotice(box, text, cls) {
+  const d = document.createElement("div");
+  d.className = cls;
+  d.textContent = text;
+  box.appendChild(d);
+}
+
+/* ---------- results ---------- */
+function render(data) {
+  const s = data.summary;
+  document.getElementById("win").textContent = (s.win < 0 ? "−" : "") + fmt(Math.abs(s.win));
+  const ratio = s.disbursed ? " That is " + (s.win / s.disbursed).toFixed(2) + " × the loan you draw." : "";
+  document.getElementById("winsub").textContent =
+    "After loan costs and tax, living costs added back, minus your own pot." + ratio;
+
+  const tiles = [
+    ["Fund value, pot + loan", fmt(s.investment), "When the loan is repaid, before tax"],
+    ["In hand after tax", fmt(s.taxed_revenue), "After living costs, loan costs and tax"],
+    ["Loan drawn", fmt(s.disbursed), "Over " + state.aid_months + " support months"],
+    ["Lainahyvitys", fmt(s.compensation), "Paid to the bank when you graduate on time"],
+    ["Total interest", fmt(s.total_interest), "All of it repaid; part is capitalised first"],
+    ["Fees", fmt(s.total_fees), "Arrangement + per-instalment fee"],
+    ["Capital income tax", fmt(s.tax), "Study years " + fmt(s.study_tax) + " · final sale " + fmt(s.final_tax)],
+    ["Monthly repayment", euro2.format(s.monthly_payment), s.repay_months + " instalments from year " + (Math.floor((s.repay_start - 1) / 12) + 1)],
+  ];
+  const box = document.getElementById("tiles");
+  box.replaceChildren();
+  for (const [label, value, note] of tiles) {
+    const t = document.createElement("div");
+    t.className = "card tile";
+    const a = document.createElement("div"); a.className = "label"; a.textContent = label;
+    const b = document.createElement("div"); b.className = "value"; b.textContent = value;
+    const c = document.createElement("div"); c.className = "note"; c.textContent = note;
+    t.append(a, b, c);
+    box.appendChild(t);
+  }
+  document.getElementById("chartsub").textContent =
+    "Studies end in " + monthLabel(s.study_end) + " and repayment starts in " + monthLabel(s.repay_start) +
+    ". Repayment plan: " + data.repayment_years + " years from the first draw.";
+  drawLegend();
+  drawChart(data);
+  if (!document.getElementById("tablewrap").hidden) drawTable(data);
+}
+
+function drawLegend() {
+  const lg = document.getElementById("legend");
+  if (lg.childElementCount) return;
+  for (const s of SERIES) {
+    const span = document.createElement("span");
+    const i = document.createElement("i");
+    i.style.borderColor = "var(" + s.css + ")";
+    span.append(i, document.createTextNode(s.label));
+    lg.appendChild(span);
+  }
+}
+
+/* ---------- chart ---------- */
+const SVGNS = "http://www.w3.org/2000/svg";
+function el(name, attrs, parent) {
+  const n = document.createElementNS(SVGNS, name);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function niceTicks(lo, hi, count) {
+  const span = hi - lo || 1;
+  const raw = span / count;
+  const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * pow).find(s => s >= raw);
+  const out = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(Math.round(v * 1e6) / 1e6);
+  return out;
+}
+
+let cursor = null;   // selected month for keyboard / hover
+
+function drawChart(data) {
+  const box = document.getElementById("chartbox");
+  const rows = data.rows;
+  const W = Math.max(300, box.clientWidth || 600);
+  const H = W < 520 ? 280 : 380;
+  const m = { l: 52, r: 14, t: 22, b: 28 };
+  const x0 = m.l, x1 = W - m.r, y0 = H - m.b, y1 = m.t;
+  const n = rows.length;
+  let lo = 0, hi = 0;
+  for (const r of rows) for (const s of SERIES) { lo = Math.min(lo, r[s.idx]); hi = Math.max(hi, r[s.idx]); }
+  const ticks = niceTicks(lo, hi, 5);
+  lo = Math.min(lo, ticks[0]); hi = Math.max(hi, ticks[ticks.length - 1]);
+  const X = mo => x0 + (mo - 1) / Math.max(1, n - 1) * (x1 - x0);
+  const Y = v => y0 - (v - lo) / (hi - lo || 1) * (y0 - y1);
+
+  box.replaceChildren();
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", tabindex: "0",
+    "aria-label": "Line chart of fund, loan owed, in hand and interest over " + n + " months. Use left and right arrow keys to read values." }, box);
+
+  for (const t of ticks) {
+    el("line", { x1: x0, x2: x1, y1: Y(t), y2: Y(t), stroke: t === 0 ? "var(--axis)" : "var(--grid)", "stroke-width": 1 }, svg);
+    const tx = el("text", { x: x0 - 8, y: Y(t) + 4, "text-anchor": "end" }, svg);
+    tx.textContent = (t < 0 ? "−" : "") + compact(Math.abs(t));
+  }
+  const years = Math.floor(n / 12);
+  const yStep = years > 24 ? 5 : years > 12 ? 2 : 1;
+  for (let y = yStep; y <= years; y += yStep) {
+    const tx = el("text", { x: X(y * 12), y: H - 8, "text-anchor": "middle" }, svg);
+    tx.textContent = "Y" + y;
+  }
+
+  for (const [mo, text, anchor] of [[data.summary.study_end, "Studies end", "end"], [data.summary.repay_start, "Repayment starts", "start"]]) {
+    if (mo > n) continue;
+    el("line", { x1: X(mo), x2: X(mo), y1: y1 - 4, y2: y0, stroke: "var(--axis)", "stroke-width": 1 }, svg);
+    const lab = el("text", { x: X(mo) + (anchor === "start" ? 4 : -4), y: y1 + 2, "text-anchor": anchor, class: "mark-label" }, svg);
+    lab.textContent = text;
+  }
+
+  for (const s of SERIES) {
+    let d = "";
+    rows.forEach((r, i) => { d += (i ? "L" : "M") + X(r[0]).toFixed(1) + " " + Y(r[s.idx]).toFixed(1); });
+    el("path", { d, fill: "none", stroke: "var(" + s.css + ")", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+  }
+
+  const cross = el("line", { y1: y1, y2: y0, stroke: "var(--ink-2)", "stroke-width": 1, opacity: 0 }, svg);
+  const dots = SERIES.map(s => el("circle", { r: 4, fill: "var(" + s.css + ")", stroke: "var(--surface)", "stroke-width": 2, opacity: 0 }, svg));
+  const tip = document.createElement("div");
+  tip.className = "tip";
+  box.appendChild(tip);
+
+  function show(mo) {
+    cursor = mo;
+    const r = rows[mo - 1];
+    cross.setAttribute("x1", X(mo)); cross.setAttribute("x2", X(mo)); cross.setAttribute("opacity", 1);
+    SERIES.forEach((s, i) => { dots[i].setAttribute("cx", X(mo)); dots[i].setAttribute("cy", Y(r[s.idx])); dots[i].setAttribute("opacity", 1); });
+    tip.replaceChildren();
+    const when = document.createElement("div"); when.className = "when"; when.textContent = monthLabel(mo) + " (month " + mo + ")";
+    tip.appendChild(when);
+    for (const s of SERIES) {
+      const row = document.createElement("div"); row.className = "row";
+      const k = document.createElement("i"); k.style.borderColor = "var(" + s.css + ")";
+      const name = document.createElement("span"); name.textContent = s.label.replace(/ \(.*\)/, "");
+      const val = document.createElement("b"); val.textContent = fmt(r[s.idx]);
+      row.append(k, name, val);
+      tip.appendChild(row);
+    }
+    const grant = document.createElement("div"); grant.className = "row";
+    const gname = document.createElement("span"); gname.textContent = "Kela grant received";
+    const gval = document.createElement("b"); gval.textContent = fmt(r[6]);
+    grant.append(gname, gval); tip.appendChild(grant);
+    tip.classList.add("on");
+    const w = tip.offsetWidth;
+    const left = X(mo) + 14 + w > W ? X(mo) - 14 - w : X(mo) + 14;
+    tip.style.left = Math.max(0, left) + "px";
+    tip.style.top = "8px";
+  }
+  function hide() {
+    cursor = null;
+    cross.setAttribute("opacity", 0);
+    dots.forEach(d => d.setAttribute("opacity", 0));
+    tip.classList.remove("on");
+  }
+  function fromPointer(ev) {
+    const rect = svg.getBoundingClientRect();
+    const px = (ev.clientX - rect.left) * (W / rect.width);
+    return Math.min(n, Math.max(1, Math.round(1 + (px - x0) / (x1 - x0) * (n - 1))));
+  }
+  const hit = el("rect", { x: x0, y: y1 - 6, width: x1 - x0, height: y0 - y1 + 6, fill: "transparent" }, svg);
+  hit.addEventListener("pointermove", ev => show(fromPointer(ev)));
+  hit.addEventListener("pointerleave", hide);
+  svg.addEventListener("keydown", ev => {
+    if (ev.key === "ArrowRight") { show(Math.min(n, (cursor || 0) + 1)); ev.preventDefault(); }
+    else if (ev.key === "ArrowLeft") { show(Math.max(1, (cursor || 2) - 1)); ev.preventDefault(); }
+    else if (ev.key === "Escape") hide();
+  });
+  svg.addEventListener("blur", hide);
+}
+
+/* ---------- table ---------- */
+function drawTable(data) {
+  const wrap = document.getElementById("tablewrap");
+  wrap.replaceChildren();
+  const table = document.createElement("table");
+  const head = document.createElement("tr");
+  for (const h of ["Month", "Loan drawn", "Fund", "Loan owed", "In hand", "Interest", "Kela grant"]) {
+    const th = document.createElement("th"); th.scope = "col"; th.textContent = h; head.appendChild(th);
+  }
+  const thead = document.createElement("thead"); thead.appendChild(head); table.appendChild(thead);
+  const body = document.createElement("tbody");
+  const rows = data.rows;
+  const picks = rows.filter(r => r[0] % 12 === 0 || r[0] === rows.length);
+  for (const r of picks) {
+    const tr = document.createElement("tr");
+    const cells = [monthLabel(r[0]), fmt(r[1]), fmt(r[2]), fmt(r[4]), fmt(r[5]), fmt(r[3]), fmt(r[6])];
+    cells.forEach(c => { const td = document.createElement("td"); td.textContent = c; tr.appendChild(td); });
+    body.appendChild(tr);
+  }
+  table.appendChild(body);
+  wrap.appendChild(table);
+}
+document.getElementById("tablebtn").addEventListener("click", ev => {
+  const wrap = document.getElementById("tablewrap");
+  wrap.hidden = !wrap.hidden;
+  ev.target.textContent = wrap.hidden ? "Show table" : "Hide table";
+  ev.target.setAttribute("aria-expanded", String(!wrap.hidden));
+  if (!wrap.hidden && last) drawTable(last);
+});
+
+new ResizeObserver(() => { if (last) drawChart(last); }).observe(document.getElementById("chartbox"));
+run();
+</script>
+</body>
+</html>

@@ -1,5 +1,8 @@
+import sys
+
 from cli import ask_inputs, euribor_get, save_outputs, MARGIN, DEBIT_FEE, ARRANGEMENT_FEE
 from model import simulate
+from web import serve
 
 i = ask_inputs()
 
@@ -41,3 +44,12 @@ if s["disbursed"]:
     print(f"You made {s['win'] / s['disbursed']:.2f} X of your loan")
 
 save_outputs(rows)
+
+if "--no-web" not in sys.argv:
+    serve({
+        "monthly_pay": i.monthly_pay, "aid_months": i.aid_months, "repayment_years": i.repayment_years,
+        "euribor": euribor12, "margin": MARGIN, "debit_fee": DEBIT_FEE, "arrangement_fee": ARRANGEMENT_FEE,
+        "growth": i.growth, "fund_fee": i.fund_fee, "starting_pot": i.starting_pot,
+        "living_cost_yearly": i.living_cost_yearly, "kela_grant": i.kela_grant,
+        "degree": i.degree_credits or 0,
+    })

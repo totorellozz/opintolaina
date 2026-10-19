@@ -254,5 +254,6 @@ def simulate(monthly_pay, aid_months, repayment_years, annual_rate_pct, fund_gro
         "living_shortfall": shortfall,
         "grant_total": grant_total,
         "study_end": study_end,
+        "repay_start": repay_start,
     }
     return rows, summary
